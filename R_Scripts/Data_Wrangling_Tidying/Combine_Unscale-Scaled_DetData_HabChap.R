@@ -93,7 +93,7 @@ full_dat <- full_dat %>% select(-c(session_name, sampling_design))
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 #### Save Unscaled Data ####
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-saveRDS(full_dat, file ="./Data/Habitat_Model_Covariates/Full_DetectionData_JAGSModels_HabChap.Rdata")
+#saveRDS(full_dat, file ="./Data/Habitat_Model_Covariates/Full_DetectionData_JAGSModels_HabChap.Rdata")
 #test <- readRDS("./Data/Habitat_Model_Covariates/Full_DetectionData_JAGSModels_HabChap.Rdata")
 
 
@@ -162,26 +162,10 @@ full_dat_s <- full_dat_s %>% select(-session_name)
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 #### Save Scaled Data ####
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-saveRDS(full_dat_s, file = "./Data/Habitat_Model_Covariates/Full_DetectionDataSCALED_JAGSModels_HabChap.Rdata") 
+#saveRDS(full_dat_s, file = "./Data/Habitat_Model_Covariates/Full_DetectionDataSCALED_JAGSModels_HabChap.Rdata") 
 
 
 
 # scaled_orig <- readRDS("./Data/Habitat_Model_Covariates/Archive/Full_DetectionDataSCALED_JAGSModels_HabChap_noARUtype.Rdata")
-test_s <- readRDS("./Data/Habitat_Model_Covariates/Full_DetectionDataSCALED_JAGSModels_HabChap.Rdata")
+#test_s <- readRDS("./Data/Habitat_Model_Covariates/Full_DetectionDataSCALED_JAGSModels_HabChap.Rdata")
 
-
-
-
-#### Gravy gravy graveyard #####
-# # need to combine each of the columns for effort, date, 
-# # Scale covariates
-# # scale column 8 - 20
-# dat1 <- scale(full_dat[,8:20])
-# # scale 23-28
-
-# full_dat <- full_dat %>% mutate(start_date_s1 = 152,
-#                                 start_date_s2 = 166,
-#                                 start_date_s3 = 180,
-#                                 start_date_s4 = 194,
-#                                 start_date_s5 = 208,
-#                                 start_date_s6 = 222)
