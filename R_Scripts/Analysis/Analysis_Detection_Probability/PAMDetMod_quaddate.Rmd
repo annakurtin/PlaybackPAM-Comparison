@@ -1,0 +1,417 @@
+---
+title: "Methods Chapter ARU Detection Model"
+author: "Anna Kurtin"
+date: "2024-10-24"
+output: html_document
+---
+
+This is the fourth version of the model I will use for the ARU detection probability. I will be incorporating a metric for detector type at each site. 
+
+Change burnin iterations to match playback model (if there's no reason to have things different just make them match)
+
+
+### Model structure:
+
+Naive state model:
+$$
+z_i \sim Bernoulli(\psi_i)
+$$ 
+$$
+\psi_i = \alpha_0
+$$
+
+Process model with four covariates:  
+
+$$
+y_{ij} \sim Bernoulli(p_{ij} * z_i)
+$$
+
+$$
+logit(p_{ij}) = \beta_0 + \beta_{1}*\text{Julian date}_{ij} + \beta_{2} * \text{Julian date}^2_{ij} + \beta_{3} * \text{backgound noise}_{i} + \beta_{4}*\text{survey effort}_{ij} + \beta_{5}* \text{vegetation density}_{i} + \beta_{6}* \text{ARU model}_i
+$$
+
+**Handling of NAs:** Skip for missing detections, imputate missing covariates.
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(jagsUI)
+library(rjags)
+library(tidyverse)
+library(jagshelper)
+library(ggplot2)
+library(corrgram)
+library(beepr)
+library(ggdist)
+source("C:/Users/annak/OneDrive/Documents/UM/Research/Coding_Workspace/Cuckoo-Research/R_Scripts/5_Visualization/Create_HexCodes_CuckooColorBlind.R")
+```
+
+Load in formatted data
+
+```{r Load in Data}
+# Read in newly formatted detection and detection covaraites data with ARU model type at site
+full_dat <- readRDS("C:/Users/annak/OneDrive/Documents/UM/Research/Coding_Workspace/Cuckoo-Research/Data/Habitat_Model_Covariates/Full_DetectionDataSCALED_JAGSModels_HabChap.Rdata")
+
+detections <- full_dat[,2:7]
+
+# Have to specify the z data for a true presence if there was a 1 at any time 
+z_dat <- rowSums(detections, na.rm = T)
+z_dat[z_dat > 1] <- 1
+z_dat[z_dat == 0] <- NA
+
+# get the length of non-nas in the detection data
+get_na <- function(x){(max(which(!is.na(x))))}
+# Apply this to our data
+miss <- apply(detections, 1, get_na)
+```
+
+*Ignore the following warnings produced by corrgram, I can't get markdown to not show them*
+
+```{R Look at Covariance, echo = FALSE, warnings = FALSE, message = FALSE}
+# Pivot this data long to be able to compare 
+dates <- select(full_dat, site_id, 21:26)
+dates_long <- dates %>% pivot_longer(cols = c(start_date_s1,
+                                              start_date_s2,
+                                              start_date_s3,
+                                              start_date_s4,
+                                              start_date_s5,
+                                              start_date_s6), names_to = "survey_period",values_to = "date" )
+# rename to s1, s2, etc
+dates_long <- dates_long %>% mutate(survey_period = case_when(survey_period == "start_date_s1" ~ "s1",
+                                                survey_period == "start_date_s2" ~ "s2",
+                                                survey_period == "start_date_s3" ~ "s3",
+                                                survey_period == "start_date_s4" ~ "s4",
+                                                survey_period == "start_date_s5" ~ "s5",
+                                                survey_period == "start_date_s6" ~ "s6"))
+# combine
+dates_long <- unite(dates_long,site_survey,c(site_id, survey_period),sep="_",remove=TRUE)
+
+db <- select(full_dat, site_id,8:13)
+db_long <- db %>% pivot_longer(cols = c(backdb_survey1,
+                                        backdb_survey2,
+                                        backdb_survey3,
+                                        backdb_survey4,
+                                        backdb_survey5,
+                                        backdb_survey6), names_to = "survey_period",values_to = "db" )
+db_long <- db_long %>% mutate(survey_period = case_when(survey_period == "backdb_survey1" ~ "s1",
+                                                survey_period == "backdb_survey2" ~ "s2",
+                                                survey_period == "backdb_survey3" ~ "s3",
+                                                survey_period == "backdb_survey4" ~ "s4",
+                                                survey_period == "backdb_survey5" ~ "s5",
+                                                survey_period == "backdb_survey6" ~ "s6"))
+db_long <- unite(db_long,site_survey,c(site_id, survey_period),sep="_",remove=TRUE)
+
+effort <- select(full_dat, site_id, 15:20)
+effort_long <- effort %>% pivot_longer(cols = c(effort_survey1,
+                                                effort_survey2,
+                                                effort_survey3,
+                                                effort_survey4,
+                                                effort_survey5,
+                                                effort_survey6), names_to = "survey_period",values_to = "effort" )
+effort_long <- effort_long %>% mutate(survey_period = case_when(survey_period == "effort_survey1" ~ "s1",
+                                                survey_period == "effort_survey2" ~ "s2",
+                                                survey_period == "effort_survey3" ~ "s3",
+                                                survey_period == "effort_survey4" ~ "s4",
+                                                survey_period == "effort_survey5" ~ "s5",
+                                                survey_period == "effort_survey6" ~ "s6"))
+effort_long <- unite(effort_long,site_survey,c(site_id, survey_period),sep="_",remove=TRUE)
+
+covs_long <- left_join(dates_long, db_long, by = "site_survey") %>% left_join(., effort_long, by = "site_survey")
+
+# corrgram(covs_long, order=TRUE, lower.panel=panel.cor,
+#          upper.panel=panel.pts, text.panel=panel.txt,
+#          main="Correlations in ARU Detection Metrics")
+
+# Include veg density in this comparison 
+# Reformat your long data
+lon2 <- covs_long %>% separate(site_survey, into = c("site_id","survey"), sep = "_") %>% select(-survey) %>% group_by(site_id) %>% summarize(date_avg = mean(date, na.rm = TRUE), db_avg = mean(db, na.rm = TRUE), effort_avg = mean(effort, na.rm = TRUE))
+# pull out veg values
+sites <- select(full_dat, site_id, veg_density_avg_scaled, SM_present)
+# combine them for comparison
+covs2 <- left_join(lon2, sites, by = "site_id")
+covs2 <- covs2 %>% select(-date_avg)
+
+corrgram(covs2, order=TRUE, lower.panel=panel.cor,
+         upper.panel=panel.pts, text.panel=panel.txt,
+         main="Correlations in ARU Detection Metrics")
+# veg data isn't colinear with the other covariates
+```
+
+
+```{R}
+# Create a list of data for JAGS
+jags_data <- list(
+  # True presence at sites with confirmed presences
+  Z = z_dat,
+  # Detection/nondetection data
+  det_data = detections,
+  # Date
+  covb1 = dates[,2:7],
+  # Background noise
+  covb3 = db[,2:7],
+  # Effort 
+  covb4 = effort[,2:7],
+  # Veg density
+  covb5 = full_dat[,14],
+  # ARU type 
+  covb6 = full_dat[,27],
+  n_unit = nrow(detections),
+  miss = miss
+)
+
+# Set initial values 
+init_func <- function(){
+  list(
+    a0 = rnorm(1, 0, 1),
+    b0 = rnorm(1, 0, 1),
+    b1 = rnorm(1, 0, 1),
+    b1Q = rnorm(1, 0 ,1),
+    b3 = rnorm(1, 0, 1),
+    b4 = rnorm(1, 0, 1),
+    b5 = rnorm(1, 0, 1),
+    b6 = rnorm(1, 0, 1)
+  )
+}
+```
+
+
+
+```{R Create Model, eval = FALSE}
+cat("
+  model{
+      # Priors
+    a0 ~ dlogis(0, 1)
+    b0 ~ dlogis(0, 1)
+    b1 ~ dlogis(0, 1)
+    b1Q ~ dlogis(0, 1)
+    b3 ~ dlogis(0, 1)
+    b4 ~ dlogis(0, 1)
+    b5 ~ dlogis(0, 1)
+    b6 ~ dlogis(0, 1)
+    
+    # Loop through each sampling unit
+    for(i in 1:n_unit){
+      covb5[i] ~ dnorm(0, 1)
+      Z[i] ~ dbern(psi[i])  # Presence or absence drawn from a bernoulli distribution with occupancy probability psi  
+      logit(psi[i]) <- a0
+      
+      
+      for(j in 1:miss[i]){
+        covb1[i,j] ~ dnorm(0, 1) # Assuming normal distribution for missing covariates
+        covb3[i,j] ~ dnorm(0, 1) # Assuming normal distribution for missing covariates
+        covb4[i,j] ~ dnorm(0, 1) # Assuming normal distribution for missing covariates
+        
+        det_data[i,j] ~  dbern(mu_p[i,j])  # Create probability density drawn for each site
+        mu_p[i,j] <- Z[i]*theta[i,j]
+        logit(theta[i,j]) <- p[i,j]
+        p[i,j] <- b0 + b1*covb1[i,j] + b1Q*(covb1[i,j]^2) + b3*covb3[i,j] + b4*covb4[i,j] + b5*covb5[i] + b6*covb6[i]
+        # Det NA
+        det_na[i,j] <- det_data[i,j]
+  
+        #Calculate Bayes p-value - plug the parameters into the equation for each sample of the posterior and use this to create new observations
+        Presi[i,j] <- (det_na[i,j] - theta[i,j])^2 # Calculate squared residual of observed data
+        y_new[i,j] ~ dbern(mu_p[i,j])             # Simulate observed data
+        Presi_new[i,j] <- (y_new[i,j] - theta[i,j])^2 # Calculate squared residual error of simulated data
+        
+      }
+    }
+    # Derived parameters
+    ## Calculate sum of squared residual errors for observed 
+    for(i in 1:n_unit){
+       sobs[i] <- sum(Presi[i,1:miss[i]])
+       ssim[i] <- sum(Presi_new[i,1:miss[i]])
+    }
+    SSEobs <- sum(sobs[])
+    SSEsim <- sum(ssim[])
+    p_val <- step(SSEsim - SSEobs) 
+  } 
+  ", file = "C:/Users/annak/OneDrive/Documents/UM/Research/Coding_Workspace/Cuckoo-Research/R_Scripts/2_Analyses/Methods_Chapter/ARU_Model/Model_Structure_Files/JAGS_ARUMod4.txt")
+```
+
+```{R Run Model, eval= TRUE, results = FALSE}
+fit_4 <- jags(data = jags_data, 
+                 model.file = "C:/Users/annak/OneDrive/Documents/UM/Research/Coding_Workspace/Cuckoo-Research/R_Scripts/2_Analyses/Methods_Chapter/ARU_Model/Model_Structure_Files/JAGS_ARUMod4.txt",
+                 parameters.to.save = c("a0", "b0", "b1", "b1Q", "b3", "b4", "b5","b6", "SSEsim","SSEobs","p_val"),
+                 n.iter = 10000, 
+                 n.burnin = 5000, 
+                 n.chains = 3,
+                 n.thin = 2,
+                 inits = init_func)
+beep(sound = 3)
+```
+
+```{R Save Model, eval = TRUE, echo = FALSE}
+saveRDS(fit_4, "C:/Users/annak/OneDrive/Documents/UM/Research/Coding_Workspace/Cuckoo-Research/R_Scripts/2_Analyses/Methods_Chapter/ARU_Model/Models_Ran_Outputs/MetChap_ARUMod4.Rdata")
+```
+
+### Model outputs: 
+```{R, eval = FALSE, echo = FALSE}
+fit_4 <- readRDS("C:/Users/annak/OneDrive/Documents/UM/Research/Coding_Workspace/Cuckoo-Research/R_Scripts/2_Analyses/Methods_Chapter/ARU_Model/Models_Ran_Outputs/MetChap_ARUMod4.Rdata")
+```
+```{R}
+summary(fit_4)
+```
+
+### Evaluate Convergence and Model Fit
+
+```{R, echo = FALSE}
+tracedens_jags(fit_4, parmfrow = c(3,4))
+```
+
+```{R Make Inference on P Value, echo = FALSE}
+plot(fit_4$sims.list$SSEobs,fit_4$sims.list$SSEsim,xlab="SSEobs",ylab="SSEsim")
+abline(0,1,lwd = 2, col = "red")
+print(paste0("P value is:",round(fit_4$mean$p_val, 2)))
+```
+
+### Evaluate Posterior Distribution
+
+```{R Create Density Plots, echo = FALSE}
+# Plot posterior distribution
+chains_m <- jags_df(fit_4)
+# Select the chains for our covariates of interest
+chains_viol <- chains_m %>% select(b1,b1Q,b3,b4,b5,b6)
+# select intercept estimate
+posterior_b0 <- chains_m %>% select(b0)
+#b0_prob <- plogis(posterior_b0)
+#boxplot(posterior_b0, col = cuckoo_palette[1],main = "Posterior Estimates for Detection Probability", horizontal = TRUE)
+# Create the slab interval plot
+ggplot(data = posterior_b0, aes(x = b0)) + 
+  # Plot posterior distributions
+  stat_slabinterval(fill = cuckoo_palette[1]) +
+  # Add a line for 0 to show overlap of posterior
+  geom_vline(xintercept = 0) +
+  # Remove background color from plots
+  theme_minimal() +
+  # Turn off the legend
+  guides(fill = "none") +
+  scale_x_continuous(limits = c(-6,8))
+
+
+
+# Rename them to be more interpretable
+colnames(chains_viol) <- c("date","quadratic date","background_noise","effort", "veg_density", "SMM present")
+# Pivot this longer so that we can visualize it
+chains_viol_long <- chains_viol %>% pivot_longer(cols = c("date","quadratic date","background_noise","effort", "veg_density", "SMM present"),names_to = "parameter", values_to = "values")
+# Select the median values and associate them with their names
+#med_vals <- data.frame(vals = c(fit_2$q50$b1,fit_2$q50$b1Q, fit_2$q50$b3, fit_2$q50$b4, fit_2$q50$b5), name = c("date","quadratic date","background_noise","effort", "veg_density"))
+
+
+f_stat <- data.frame(
+  parameter = c("date",
+                "quadratic date",
+                "background_noise",
+                "effort", 
+                "veg_density",
+                "SMM present"),
+  median_value = c(paste0("F: ", round(fit_4$f$b1,2)), 
+                   paste0("F: ",round(fit_4$f$b1Q,2)), 
+                   paste0("F: ",round(fit_4$f$b3,2)), 
+                   paste0("F: ",round(fit_4$f$b4,2)),
+                   paste0("F: ",round(fit_4$f$b5,2)),
+                   paste0("F: ",round(fit_4$f$b6,2)))
+)
+# Create the density plots
+
+# Create the slab interval plot
+ggplot(data = chains_viol_long, aes(x = values, y = parameter, fill = parameter)) + 
+  # Plot posterior distributions
+  stat_slabinterval() +
+  # Establish colors
+  scale_fill_manual(values = c("veg_density"=palette_5[1], 
+                               "background_noise" = palette_5[2],
+                               "effort"=palette_5[3], 
+                               "date" = palette_5[4], 
+                               "quadratic date" = palette_5[5],
+                                "SMM present" = palette_8[1])) +
+  # Add a line for 0 to show overlap of posterior
+  geom_vline(xintercept = 0) +
+  # Remove background color from plots
+  theme_minimal() +
+  # Turn off the legend
+  guides(fill = "none")+
+  # Add median values as text labels
+  geom_text(data = f_stat, aes(x = 3.5, y = parameter, label = median_value), color = "black", hjust = 2) 
+```
+
+```{R Posterior Estimates}
+b1 <- round(plogis(fit_4$q50$b0 + fit_4$q50$b4), 3)
+print(paste0("date:", b1))
+
+b1Q <- round(plogis(fit_4$q50$b0 + fit_4$q50$b1Q), 3)
+print(paste0("quadratic effect of date:", b1Q))
+```
+
+Detection probability estimates:
+
+```{R, echo =FALSE}
+p <- round(plogis(fit_4$q50$b0),4)
+print(paste0("Estimate for detection probability of a single ARU survey:",p))
+
+n <- 6
+p_star <- round(1 - (1 - p)^n, 4)
+print(paste0("Estimate for cumulative ARU detection probability:",p_star))
+```
+
+
+
+# Extract WAIC as a comparison
+
+```{R Extract WAIC}
+# Extract samples from the posterior
+f_s <- jags.samples(fit_4$model,
+                           c("WAIC","deviance"),
+                           type = "mean",
+                           n.iter = 5000,
+                           n.burnin = 1000,
+                           n.thin = 2)
+beep()
+# Duplicate WAIC samples - the WAIC is the posterior mean for that sample?
+f_s$p_waic <- f_s$WAIC
+# Calculate a new waic by adding the waic plus the deviance
+f_s$waic_calc <- f_s$deviance + f_s$p_waic
+# Create a new vector of the sum across each array (sum WAIC, sum deviance, sum p_waic, and sum waic_calc)
+tmp <- sapply(f_s, sum)
+# Pull out the sum of the WAIC we calculated and the p_waic we duplicated
+waic_f <- round(c(waic = tmp[["waic_calc"]], p_waic = tmp[["p_waic"]]),1)
+# Calculate the standard error for WAIC
+f_waic_se <- sd(f_s$waic_calc)/(sqrt(length(f_s$waic_calc)))
+
+waic_f
+f_waic_se
+```
+
+
+
+How does this compare with the sites that also had playback surveys?
+```{R Double Observer Method}
+# how does this line up with our naive estimates of how many sites had detections on ARU vs PB?
+pb_dat <- read.csv("C:/Users/annak/OneDrive/Documents/UM/Research/Coding_Workspace/Cuckoo-Research/Data/Playback_Results/2023/Outputs/2023_PBData_FormatforOccModSCALED_8-6-24.csv")
+# Pull out playback detections
+pb_dat$bbcu_pb <- apply(pb_dat[, 2:4], 1, max, na.rm = TRUE)
+pb <- pb_dat %>% select(site_id, bbcu_pb)
+#sum(pb$bbcu_pb)
+
+# Pull out ARU detections
+full_dat$bbcu_aru <- apply(full_dat[,2:7], 1, max, na.rm = TRUE)
+aru <- full_dat %>% select(site_id, bbcu_aru)
+#sum(aru$bbcu_aru)
+comp_dat <- inner_join(aru,pb, by = "site_id")
+# which playback data wasn't in the ARU data?
+pb_only <- pb %>% filter(!site_id %in% comp_dat$site_id)
+
+comp_dat$pres <- apply(comp_dat[, 2:3], 1, max, na.rm = TRUE)
+# how many sites truly had cuckoos?
+print(paste0("Sites with both PB and ARU with BBCU detected: ",sum(comp_dat$pres)))
+
+# What is the naive estimate for detection probability for each method?
+# Naive occupancy estimate
+naiveocc_aru <- (sum(comp_dat$bbcu_aru)/nrow(comp_dat)) * 100
+naivedet_aru <- round((sum(comp_dat$bbcu_aru)/sum(comp_dat$pres)) * 100, 2)
+naiveocc_pb <- (sum(comp_dat$bbcu_pb)/nrow(comp_dat)) * 100
+naivedet_pb <- (sum(comp_dat$bbcu_pb)/sum(comp_dat$pres)) * 100
+print(paste0("Naive detection estimate (%) for ARU surveys:", naivedet_aru))
+print(paste0("Naive detection estimate (%) for playback surveys: ", naivedet_pb))
+# what would the value for occupancy with playbacks be if we corrected it by the detection?
+```
+
+

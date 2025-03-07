@@ -1,0 +1,419 @@
+---
+title: "Playback Detection Model 2"
+author: "Anna Kurtin"
+date: "2024-09-19"
+output: html_document
+---
+
+This is the second version of the detection submodel for the playback data. I'm going through other studies and looking at what affected detection of BBCU or YBCU. 
+Covariates to include: 
+
+* date (as a proxy for round of survey/time during the season like they included), temperature (Based on Johnson and Benson 2022)
+* noise (Johnson and Benson 2023)
+
+ I tried to find more informative priors for temperature and noise based off of the Johnson and Benson paper, but was struggling with how to change the beta coefficients from these papers into something we could use. Do we need more informed priors since the data is small?
+
+*Effective sample size for this data* 33 * 3 = 66. What is the number of parameters we can effectively fit with this data? 
+
+#### Model Structure: 
+
+Naive state model:
+
+$$
+z_i \sim Bernoulli(\psi_i)
+$$ 
+
+$$
+\psi_i = \alpha_0
+$$ 
+Detection model with six covariates:  
+
+* b1: date
+
+* b2: quadratic effect of date
+
+* b3: wind condition
+
+* b4: starting temperature
+
+
+
+$$
+y_{ij} \sim Bernoulli(p_{ij} * z_i)
+$$
+Equation for manuscript
+$$
+p_{ij} = \beta_0 + \beta_{1}*date + \beta_{2}*date^2 + \beta_3*wind + \beta_4*temperature
+$$
+
+Formula for manuscript
+$$
+logit(p_{ij}) = \beta_0 + \beta_1 * \text{Julian date}_{ij} + \beta_2 * \text{Julian date}^2_{ij} + \beta_3 * \text{wind}_{ij} + \beta_4 * \text{temperature}_{ij}
+$$
+**Handling of NAs:** omission for detections, imputation for habitat covariates
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(jagsUI)
+library(rjags)
+library(tidyverse)
+library(jagshelper)
+library(ggplot2)
+library(ggdist)
+library(corrgram)
+source("C:/Users/annak/OneDrive/Documents/UM/Research/Coding_Workspace/Cuckoo-Research/R_Scripts/5_Visualization/Create_HexCodes_CuckooColorBlind.R")
+```
+
+```{r Read in Data, warnings = FALSE, message = FALSE}
+pb_dat <- read.csv("C:/Users/annak/OneDrive/Documents/UM/Research/Coding_Workspace/Cuckoo-Research/Data/Playback_Results/2023/Outputs/2023_PBData_FormatforOccModSCALED_8-6-24.csv")
+
+detections <- pb_dat[,2:4]
+
+# Have to specify the z data for a true presence if there was a 1 at any time 
+z_dat <- rowSums(detections, na.rm = T)
+z_dat[z_dat > 1] <- 1
+z_dat[z_dat == 0] <- NA
+
+# get the length of non-nas in the detection data
+get_na <- function(x){(max(which(!is.na(x))))}
+# Apply this to our data
+miss <- apply(detections, 1, get_na)
+```
+
+*Ignore the following warnings produced by corrgram, I can't get markdown to not show them*
+
+```{R Look at Colinearity, echo = FALSE, warnings = FALSE, message = FALSE}
+# Extract dates and format longer to look at colinearity 
+dates <- pb_dat %>% select(site_id, date_s1, date_s2, date_s3)
+dates_long <- dates %>% pivot_longer(cols = c(date_s1,date_s2,date_s3), names_to = "survey_period",values_to = "date")
+dates_long <- dates_long %>% mutate(survey_period = case_when(survey_period == "date_s1" ~ "s1",
+                                                              survey_period == "date_s2" ~ "s2",
+                                                              survey_period == "date_s3" ~ "s3"))
+dates_long <- unite(dates_long,site_survey,c(site_id, survey_period),sep="_",remove=TRUE)
+
+# Extract wind and format longer to look at colinearity 
+wind <- pb_dat %>% select(site_id, wind_s1, wind_s2, wind_s3)
+wind_long <- wind %>% pivot_longer(cols = c(wind_s1, wind_s2, wind_s3), names_to = "survey_period", values_to = "wind")
+wind_long <- wind_long %>% mutate(survey_period = case_when(survey_period == "wind_s1" ~ "s1",
+                                                            survey_period == "wind_s2" ~ "s2",
+                                                            survey_period == "wind_s3" ~ "s3"))
+wind_long <- unite(wind_long, site_survey,c(site_id,survey_period), sep = "_", remove = TRUE)
+
+# Extract temp and format longer to look at colinearity 
+temp <- pb_dat %>% select(site_id, temp_s1, temp_s2, temp_s3)
+temp_long <- temp %>% pivot_longer(cols = c(temp_s1, temp_s2, temp_s3), names_to = "survey_period", values_to = "temp")
+temp_long <- temp_long %>% mutate(survey_period = case_when(survey_period == "temp_s1" ~ "s1",
+                                                            survey_period == "temp_s2" ~ "s2",
+                                                            survey_period == "temp_s3" ~ "s3"))
+temp_long <- unite(temp_long, site_survey, c(site_id, survey_period), sep = "_", remove = TRUE)
+
+covs_long <- left_join(dates_long, wind_long, by = "site_survey") %>% left_join(., temp_long, by = "site_survey")
+
+corrgram(covs_long, order=TRUE, lower.panel=panel.cor,
+         upper.panel=panel.pts, text.panel=panel.txt,
+         main="Correlations in PB Detection Metrics")
+
+# Unused
+obs <- pb_dat %>% select(site_id, num_obs_s1, num_obs_s2, num_obs_s3)
+time <- pb_dat %>% select(site_id, time_s1, time_s2, time_s3)
+```
+
+No correlations here to worry about (all r < 0.6)
+
+```{R, echo = FALSE, eval = FALSE}
+# Converting estimates of detection from previous studies to log odds for use in this model
+# Johnson and Benson 2022: effect of temperature at a site level: 0.26
+# Choosing site level instead of point level because it corresponds most strongly to what we're looking at (grouping by site)
+# This is reported on unscaled data on probability scale
+# Pulled from supplements the SE of temperature on a landscape/site scale
+se_temp <- 0.33
+# from methods: selected 41 sites
+nsite_JB22 <- 41
+# to convert to standard deviation, multiply by the square root of the sample size
+sd_temp <- se_temp*sqrt(nsite_JB22)
+# From supplement - mean temp on landscape/site scale
+mean_temp <- 19.2
+# calculate scaled beta based on formula for regression: https://stats.stackexchange.com/questions/74622/converting-standardized-betas-back-to-original-variables
+# formula B*(sdx/sdy)
+## what is the standard deviation of the y covariate? this is binary 1/0, BBCU recorded at 107 of 345 sites
+p <- 107/345 # probability of success
+sd_yJB22 <-  sqrt(p * (1 - p))
+scaled_btemp <- 0.26 *(sd_temp/sd_yJB22)
+# Now convert this to log odds for your prior
+ptemp_JB22 <- qlogis(scaled_btemp)
+
+
+# effect of noise on detection probability of BBCU (Johnson and Benson 2023)
+# Reported on unscaled data on log odds scale
+pnoise <- -0.45
+
+#Based on conversation with Kaitlyn and Colton 9/23 - the authors are reporting the covariate estimates on the scaled data, not the unscaled data. J&B '23 reports the estimates in the logit (log odds) scale and the values on unscaled data, J&B '22 reports the estimates in the probability scale and the value on the unscaled data. 
+
+# To transform the estimate: 
+#(b *sd_x/sd_response)
+```
+
+### Set Up and Run Model
+
+```{R Setup JAGS Data}
+# Create a list of data for JAGS
+jags_data <- list(
+  # True presence at sites with confirmed presences
+  Z = z_dat,
+  # Detection/nondetection data
+  det_data = detections,
+  # Date
+  covb1 = dates[,2:4],
+  # wind condition
+  covb3 = wind[,2:4],
+  # temp
+  covb4 = temp[,2:4],
+  n_unit = nrow(detections),
+  miss = miss
+)
+
+# Set initial values 
+init_func <- function(){
+  list(
+    a0 = rnorm(1, 0, 1),
+    b0 = rnorm(1, 0, 1),
+    b1 = rnorm(1, 0, 1),
+    b1Q = rnorm(1, 0 ,1),
+    b3 = rnorm(1, 0, 1),
+    b4 = rnorm(1, 0, 1)
+  )
+}
+```
+
+```{R PB Model 1 Structure, eval = FALSE}
+cat("
+  model{
+        # Priors
+    a0 ~ dlogis(0, 1)
+    b0 ~ dlogis(0, 1)
+    b1 ~ dlogis(0, 1)
+    b1Q ~ dlogis(0, 1)
+    b3 ~ dlogis(0, 1)
+    b4 ~ dlogis(0, 1)
+  
+    # Likelihood
+    # Loop through each sampling unit
+    for(i in 1:n_unit){
+  
+      Z[i] ~ dbern(psi[i])  # Presence or absence drawn from a bernoulli distribution with occupancy probability psi  
+      logit(psi[i]) <- a0 
+  
+      for(j in 1:miss[i]){
+       # Impute missing detection data
+        covb1[i,j] ~ dnorm(0, 1)
+        covb3[i,j] ~ dnorm(0, 1)
+        covb4[i,j] ~ dnorm(0, 1)
+  
+        det_data[i,j] ~  dbern(mu_p[i,j])  # Create probability density drawn for each site
+        mu_p[i,j] <- Z[i]*theta[i,j]
+        logit(theta[i,j]) <- p[i,j]
+        p[i,j] <- b0 + b1*covb1[i,j] + b1Q*(covb1[i,j]^2) + b3*covb3[i,j] + b4*covb4[i,j] 
+        # Det NA
+        det_na[i,j] <- det_data[i,j]
+  
+        #Calculate Bayes p-value - plug the parameters into the equation for each sample of the posterior and use this to create new observations
+        Presi[i,j] <- (det_na[i,j] - theta[i,j])^2 # Calculate squared residual of observed data
+        y_new[i,j] ~ dbern(mu_p[i,j])             # Simulate observed data
+        Presi_new[i,j] <- (y_new[i,j] - theta[i,j])^2 # Calculate squared residual error of simulated data
+      }
+    }
+    
+    # Derived parameters
+    ## Calculate sum of squared residual errors for observed 
+    for(i in 1:n_unit){
+       sobs[i] <- sum(Presi[i,1:miss[i]])
+       ssim[i] <- sum(Presi_new[i,1:miss[i]])
+    }
+    
+    SSEobs <- sum(sobs[])
+    SSEsim <- sum(ssim[])
+    p_val <- step(SSEsim - SSEobs)  
+    
+  }
+  ", file = "C:/Users/annak/OneDrive/Documents/UM/Research/Coding_Workspace/Cuckoo-Research/R_Scripts/2_Analyses/Methods_Chapter/Playback_Model/Model_Structure_Files/JAGS_PBMod2.txt")
+
+```
+
+```{R Run Model, eval = FALSE, results = FALSE}
+fit_2 <- jags(data = jags_data, 
+                 model.file = "C:/Users/annak/OneDrive/Documents/UM/Research/Coding_Workspace/Cuckoo-Research/R_Scripts/2_Analyses/Methods_Chapter/Playback_Model/Model_Structure_Files/JAGS_PBMod2.txt",
+                 parameters.to.save = c("a0", "b0", "b1", "b1Q", "b3", "b4","SSEsim","SSEobs", "p_val"),
+                 n.iter = 10000, 
+                 n.burnin = 5000, 
+                 n.chains = 3,
+                 n.thin = 2,
+                 inits = init_func)
+beep(sound = 3)
+saveRDS(fit_2,"C:/Users/annak/OneDrive/Documents/UM/Research/Coding_Workspace/Cuckoo-Research/R_Scripts/2_Analyses/Methods_Chapter/Playback_Model/Models_Ran_Outputs/JAGS_PBMod2.txt")
+```
+
+```{R, echo = FALSE}
+fit_2 <- readRDS("C:/Users/annak/OneDrive/Documents/UM/Research/Coding_Workspace/Cuckoo-Research/R_Scripts/2_Analyses/Methods_Chapter/Playback_Model/Models_Ran_Outputs/JAGS_PBMod2.txt")
+```
+
+```{R, echo = FALSE}
+summary(fit_2)
+```
+
+### Check Convergence and Model Fit 
+
+```{R, echo = FALSE}
+tracedens_jags(fit_2, parmfrow = c(2,2))
+```
+
+```{R Make Inference on P Value, echo = FALSE}
+plot(fit_2$sims.list$SSEobs,fit_2$sims.list$SSEsim,xlab="SSEobs",ylab="SSEsim")
+abline(0,1,lwd = 2, col = "red")
+print(paste0("P value is:",round(fit_2$mean$p_val, 2)))
+```
+
+Convergence and fit look good.
+
+### Evaluate Posterior Distributions
+
+```{R Create Violin Plots, echo = FALSE}
+chains_2 <- jags_df(fit_2)
+
+chains_beta <- chains_2 %>% select(b1, b1Q, b3, b4)
+
+# select intercept estimate
+posterior_b0 <- chains_2 %>% select(b0)
+#boxplot(posterior_b0, col = cuckoo_palette[1],main = "Posterior Estimates for Detection Probability", horizontal = TRUE)
+#boxplot(posterior_b0, col = cuckoo_palette[1],main = "Posterior Estimates for Detection Probability", horizontal = TRUE)
+# Create the slab interval plot
+ggplot(data = posterior_b0, aes(x = b0)) + 
+  # Plot posterior distributions
+  stat_slabinterval(fill = cuckoo_palette[1]) +
+  # Add a line for 0 to show overlap of posterior
+  geom_vline(xintercept = 0) +
+  # Remove background color from plots
+  theme_minimal() +
+  # Turn off the legend
+  guides(fill = "none") +
+  scale_x_continuous(limits = c(-6,8))
+
+colnames(chains_beta) <- c("date", 
+                           "quadratic date",
+                           "wind_strength",
+                           "temp")
+chains_beta_l <- chains_beta %>% pivot_longer(cols = c("date", 
+                                                       "quadratic date", 
+                                                       "wind_strength",
+                                                       "temp"),names_to = "parameter", values_to = "values")
+
+f_stat <- data.frame(
+  parameter = c("date", 
+                "quadratic date", 
+                "wind_strength",
+                "temp"),
+  median_value = c(paste0("F: ", round(fit_2$f$b1,2)), 
+                   paste0("F: ",round(fit_2$f$b1Q,2)), 
+                   paste0("F: ",round(fit_2$f$b3,2)), 
+                   paste0("F: ",round(fit_2$f$b4,2)))
+)
+# Create the density plots
+# Create the slab interval plot
+ggplot(data = chains_beta_l, aes(x = values, y = parameter, fill = parameter)) + 
+  # Plot posterior distributions
+  stat_slabinterval() +
+  # Establish colors
+  scale_fill_manual(values = c("temp" = palette_5[2],
+                               "wind_strength"=palette_5[3], 
+                               "date" = palette_5[4], 
+                               "quadratic date" = palette_5[5])) +
+  # Add a line for 0 to show overlap of posterior
+  geom_vline(xintercept = 0) +
+  # Remove background color from plots
+  theme_minimal() +
+  # Turn off the legend
+  guides(fill = "none")+
+  # Add median values as text labels
+  geom_text(data = f_stat, aes(x = 3.5, y = parameter, label = median_value), color = "black", hjust = -3) 
+```
+
+```{R Posterior Estimates}
+b1 <- round(plogis(fit_2$q50$b0 + fit_2$q50$b4), 3)
+print(paste0("date:", b1))
+
+b1Q <- round(plogis(fit_2$q50$b0 + fit_2$q50$b1Q), 3)
+print(paste0("quadratic effect of date:", b1Q))
+```
+
+Detection probability estimates:
+
+```{R Look at Detection Prob Estimates, echo = FALSE}
+p <- round(plogis(fit_2$q50$b0),4)
+print(paste0("Detection probability for one survey: ",p*100))
+
+n <- 3
+p_star <- round(1 - (1 - p)^n,4)
+print(paste0("Cumulative estimated detection probability: ",p_star*100))
+# how does this line up with our naive estimates of how many sites had detections on ARU vs PB
+```
+
+### How Many Surveys Do we Need?
+
+```{R}
+# empty array for storing detection probability
+#array: same number of rows as MCMC samples, same columns as number of surveys you want to investigate
+nrow <- fit_2$mcmc.info$n.samples
+max_surveys <- 10
+pstar <- array(NA, dim = c(nrow, max_surveys))
+
+# Set up x values with the same number of rows as your array
+# x values will allow plotting of box values
+x <-  cbind(rep(1, nrow), rep(2, nrow), rep(3, nrow), 
+          rep(4, nrow), rep(5, nrow), rep(6, nrow), 
+          rep(7, nrow), rep(8, nrow), rep(9, nrow), 
+          rep(10, nrow))
+
+#Set up a for-loop that will run the same amount of iterations as the samples produced in the MCMC
+for (i in 1:nrow) { 
+  # fills in data for each row 
+  for (j in 1:max_surveys){ 
+    # Fills in data for each column (i.e. number of columns)
+    pstar[i,j] <- 1 - (1 - plogis(fit_2$sims.list$b0[i] + fit_2$sims.list$b1[i]*0 + fit_2$sims.list$b1Q[i]*0)+ fit_2$sims.list$b3[i]*0+ fit_2$sims.list$b4[i]*0)^j #Calculate estimated maximum detection probability for each survey using mean probability calculated in the MCMC 
+  } 
+}
+
+#Plot the probability of detection for each survey, along with associated confidence intervals 
+boxplot(pstar ~ x, col = cuckoo_palette[1], las = 1, ylab = "Cumulative Detection Probability", 
+        xlab = "Number of surveys", outline = FALSE)
+#Add an abline that represents the 95% CI cutoff 
+abline(h = 0.95, lty = 2, lwd = 2)
+```
+
+
+
+```{R Graveyard, echo = FALSE, eval = FALSE}
+# # OLD: se on a point scale
+# se_temp <- 1.74
+# # sample size calculating by summing up all the surveys they said they did
+# samp1_JB22 <- 473+993+492+1029
+# # Sample size calcuated by summing up the number of points by how many times they were surveyed each seas
+# # 345 points, each sampled 3 times in 2019 (345x3) and each 3 x in 2020 (331.4 x 3)except 4 surveyed 2x (4 x 8.4 avg points per site - 33.6 points)
+# samp2_JB22 <- (345*3)+(331.4*3)+(33.6*2)
+# sd_temp <- 1.74*sqrt(samp2_JB22)
+# # was very large (95) using estimates from samp1, samp2 seems more reasonable. Not sure which one is the actual number of surveys.
+
+# Johnson and Benson 2022: effect of temperature at point scale: 0.12
+qlogis(0.12)
+# Use these for our prior values
+# Am I converting these from the paper correctly? Seems like a strong effect
+
+
+
+#OLD # Create the violin plot
+# ggplot() +
+#   geom_violin(data=chains_beta_l, aes(x = Parameter, y = Values,fill = Parameter),trim = FALSE) +
+#   labs(title = "Posterior Distribution of Detection Covariates") +
+#   scale_fill_manual(values = c("date" = palette_8[1], "quadratic date" = palette_8[2],  "wind_strength" = palette_8[5], "temp" = palette_8[6])) + 
+#   geom_hline(yintercept = 0, linetype = "solid", color = "black") +
+#   theme_minimal()
+
+```
