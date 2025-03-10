@@ -6,25 +6,19 @@
 
 # Last modified: 5/16/2024
 
-#TODO
-# Wait until region 5 is finished running
-# incorporate region 5 into this script
-# Write the data from this script
-# Copy over your analysis code
-# Incorporate decibel as a survey level covariate in the detection models and see what happens
 
 #### Setup #################################
 packages <- c("tidyverse","janitor","lubridate")
-source("./R_Scripts/6_Function_Scripts/Install_Load_Packages.R")
-source("./R_Scripts/6_Function_Scripts/Create_SiteColumn_fromPointID.R")
+source("./Function_Scripts/Install_Load_Packages.R")
+source("./Function_Scripts/Create_SiteColumn_fromPointID.R")
 load_packages(packages)
 
 #### Read in and Combine Data #############################
 
-umbel <- read.csv("./Data/Habitat_Model_Covariates/Detection_Covariates/Background_Noise_Bandpass/2023_UMBEL_Background_Noise.csv")
-fwpr7 <- read.csv("./Data/Habitat_Model_Covariates/Detection_Covariates/Background_Noise_Bandpass/2023_FWPR7_Background_Noise.csv")
-fwpr6 <- read.csv("./Data/Habitat_Model_Covariates/Detection_Covariates/Background_Noise_Bandpass/2023_FWPR6_Background_Noise.csv")
-fwpr5 <- read.csv("./Data/Habitat_Model_Covariates/Detection_Covariates/Background_Noise_Bandpass/2023_FWPR5_Background_Noise.csv")
+umbel <- read.csv("./Data_Wrangling_Tidying/Background_Noise/Data/2023_UMBEL_Background_Noise.csv")
+fwpr7 <- read.csv("./Data_Wrangling_Tidying/Background_Noise/Data//2023_FWPR7_Background_Noise.csv")
+fwpr6 <- read.csv("./Data_Wrangling_Tidying/Background_Noise/Data/2023_FWPR6_Background_Noise.csv")
+fwpr5 <- read.csv("./Data_Wrangling_Tidying/Background_Noise/Data/2023_FWPR5_Background_Noise.csv")
 # Combine them
 all_dat <- rbind(umbel,fwpr7,fwpr6,fwpr5) %>% clean_names()
 # Remove the filler headers from combining the datasheets
@@ -75,6 +69,6 @@ final_dat <- summary_dat %>%
   pivot_wider(names_from = period, values_from = avg_db)
 
 #write the output
-#write.csv(final_dat, "C:/Users/annak/OneDrive/Documents/UM/Research/Coding_Workspace/Cuckoo-Research/Data/Habitat_Model_Covariates/Detection_Covariates/BackgroundNoiseBandpass_2023_ARUPoints.csv" ,row.names = FALSE)
+#write.csv(final_dat, "./Data_Wrangling_Tidying/Background_Noise/Data/BackgroundNoiseBandpass_2023_ARUPoints.csv" ,row.names = FALSE)
 
 

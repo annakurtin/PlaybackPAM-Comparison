@@ -11,11 +11,7 @@ Covariates to include:
 * date, temperature (Based on Johnson and Benson 2022)
 * noise (Johnson and Benson 2023)
 
-I'm going to try to remove the state submodel and only focus on the detection process. 
-
 Change for this model: No quadratic effect of date!!! 
-
-*Effective sample size for this data* 33 * 3 = 66. So we can have a maximum of about 5-6 parameters to fit the model. 
 
 Naive state model:
 
@@ -55,11 +51,11 @@ library(jagshelper)
 library(ggplot2)
 library(beepr)
 library(corrgram)
-source("C:/Users/annak/OneDrive/Documents/UM/Research/Coding_Workspace/Cuckoo-Research/R_Scripts/5_Visualization/Create_HexCodes_CuckooColorBlind.R")
+source("./Function_Scripts/Create_HexCodes_CuckooColorBlind.R")
 ```
 
 ```{r Read in Data}
-pb_dat <- read.csv("C:/Users/annak/OneDrive/Documents/UM/Research/Coding_Workspace/Cuckoo-Research/Data/Playback_Results/2023/Outputs/2023_PBData_FormatforOccModSCALED_8-6-24.csv")
+pb_dat <- read.csv("./Analysis/Analysis_Detection_Probability/Data/2023_PBData_FormatforOccModSCALED_8-6-24.csv")
 
 detections <- pb_dat[,2:4]
 
@@ -200,13 +196,13 @@ cat("
     p_val <- step(SSEsim - SSEobs)  
     
   }
-  ", file = "C:/Users/annak/OneDrive/Documents/UM/Research/Coding_Workspace/Cuckoo-Research/R_Scripts/2_Analyses/Methods_Chapter/Playback_Model/Model_Structure_Files/JAGS_PBMod3.txt")
+  ", file = "./Analysis/Analysis_Detection_Probability/Model_Structure_Files/JAGS_PBMod3.txt")
 
 ```
 
 ```{R Run Model, eval = FALSE, results = FALSE}
 fit_3 <- jags(data = jags_data, 
-                 model.file = "C:/Users/annak/OneDrive/Documents/UM/Research/Coding_Workspace/Cuckoo-Research/R_Scripts/2_Analyses/Methods_Chapter/Playback_Model/Model_Structure_Files/JAGS_PBMod3.txt",
+                 model.file = "./Analysis/Analysis_Detection_Probability/Model_Structure_Files/JAGS_PBMod3.txt",
                  parameters.to.save = c("b0", "b1","b1Q","b3", "b4", "SSEsim","SSEobs","p_val"),
                  n.iter = 10000, 
                  n.burnin = 5000, 
@@ -214,11 +210,11 @@ fit_3 <- jags(data = jags_data,
                  n.thin = 2,
                  inits = init_func)
 beep(sound = 3)
-saveRDS(fit_3,"C:/Users/annak/OneDrive/Documents/UM/Research/Coding_Workspace/Cuckoo-Research/R_Scripts/2_Analyses/Methods_Chapter/Playback_Model/Models_Ran_Outputs/JAGS_PBMod3.txt")
+saveRDS(fit_3,"./Analysis/Analysis_Detection_Probability/Models_Ran_Outputs/JAGS_PBMod3.txt")
 ```
 
 ```{R}
-fit_3 <- readRDS("C:/Users/annak/OneDrive/Documents/UM/Research/Coding_Workspace/Cuckoo-Research/R_Scripts/2_Analyses/Methods_Chapter/Playback_Model/Models_Ran_Outputs/JAGS_PBMod3.txt")
+fit_3 <- readRDS("./Analysis/Analysis_Detection_Probability/Models_Ran_Outputs/JAGS_PBMod3.txt")
 
 ```
 
@@ -273,36 +269,3 @@ p_star <- round(1 - (1 - p)^n,4)
 print(paste0("Cumulative estimated detection probability:",p_star*100))
 # how does this line up with our naive estimates of how many sites had detections on ARU vs PB
 ```
-
-
-```{R}
-# empty array for storing detection probability
-#array: same number of rows as MCMC samples, same columns as number of surveys you want to investigate
-# nrow <- fit_2$mcmc.info$n.samples
-# max_surveys <- 10
-# pstar <- array(NA, dim = c(nrow, max_surveys))
-# 
-# # Set up x values with the same number of rows as your array
-# # x values will allow plotting of box values
-# x <-  cbind(rep(1, nrow), rep(2, nrow), rep(3, nrow), 
-#           rep(4, nrow), rep(5, nrow), rep(6, nrow), 
-#           rep(7, nrow), rep(8, nrow), rep(9, nrow), 
-#           rep(10, nrow))
-# 
-# #Set up a for-loop that will run the same amount of iterations as the samples produced in the MCMC
-# for (i in 1:nrow) { 
-#   # fills in data for each row 
-#   for (j in 1:max_surveys){ 
-#     # Fills in data for each column (i.e. number of columns)
-#     pstar[i,j] <- 1 - (1 - plogis(fit_2$sims.list$b0[i]))^j #Calculate estimated maximum detection probability for each survey using mean probability calculated in the MCMC 
-#   } 
-# }
-# 
-# #Plot the probability of detection for each survey, along with associated confidence intervals 
-# boxplot(pstar ~ x, col = cuckoo_palette[1], las = 1, ylab = "Cumulative Detection Probability", 
-#         xlab = "Number of surveys", outline = FALSE)
-# #Add an abline that represents the 95% CI cutoff 
-# abline(h = 0.95, lty = 2, lwd = 2)
-```
-
-Does this mean that we would need a minimum of 5 surveys to even begin having some informed estimate of uncertainty?

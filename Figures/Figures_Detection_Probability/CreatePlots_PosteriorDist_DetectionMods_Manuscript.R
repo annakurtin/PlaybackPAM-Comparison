@@ -5,15 +5,15 @@ library(patchwork)
 library(ggdist)
 library(jagsUI)
 library(jagshelper)
-source("./R_Scripts/5_Visualization/Create_HexCodes_CuckooColorBlind.R")
+source("./Function_Scripts/Create_HexCodes_CuckooColorBlind.R")
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 #### Read in models #####
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 # Detection model - ARU
-fit_aru <- readRDS("C:/Users/annak/OneDrive/Documents/UM/Research/Coding_Workspace/Cuckoo-Research/R_Scripts/2_Analyses/Methods_Chapter/ARU_Model/Models_Ran_Outputs/MetChap_ARUMod4.Rdata")
+fit_aru <- readRDS("./Analysis/Analysis_Detection_Probability/Models_Ran_Outputs/MetChap_ARUMod4.Rdata")
 # Detection model - PB
-fit_pb <- readRDS("C:/Users/annak/OneDrive/Documents/UM/Research/Coding_Workspace/Cuckoo-Research/R_Scripts/2_Analyses/Methods_Chapter/Playback_Model/Models_Ran_Outputs/JAGS_PBMod2.txt")
+fit_pb <- readRDS("./Analysis/Analysis_Detection_Probability/Models_Ran_Outputs/JAGS_PBMod2.txt")
 
 
 
@@ -217,57 +217,3 @@ dense_det_pb <- ggplot(data = chains_beta_l, aes(x = values, y = parameter, fill
   # Turn off the legend
   guides(fill = FALSE)
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-#### Code Graveyard #####
-# Old label
-# # Adjust x axis
-# scale_x_continuous(limits = c(-3.5,3), breaks = seq(-3,2, by = 1)) +
-#   # Add a line for 0 to show overlap of posterior
-#   geom_vline(xintercept = 0, color = "gray12", linetype = "dashed") +
-#   # Add median values as text labels
-#   geom_label(data = f_stat, 
-#              aes(x = 2.75, y = parameter, label = median_value),
-#              size = 6, color = "black", 
-#              hjust = .6, label.size = 0) +
-#   annotate("label", x = 2.65, y = 7, label = "F Statistic:", 
-#            size = 6, color = "black", fill = "white", 
-#            label.size = 0) +
-#   # Turn off the legend
-#   guides(fill = FALSE)
-
-
-# Create the density plots
-
-# # Create the slab interval plot
-# ggplot(data = chains_viol_long, aes(x = values, y = parameter, fill = parameter)) + 
-#   # Plot posterior distributions
-#   stat_slabinterval() +
-#   # Establish colors
-#   scale_fill_manual(values = c("veg_density"=palette_5[1], 
-#                                "background_noise" = palette_5[2],
-#                                "effort"=palette_5[3], 
-#                                "date" = palette_5[4], 
-#                                "quadratic date" = palette_5[5],
-#                                "SMM present" = palette_8[1])) +
-#   # Add a line for 0 to show overlap of posterior
-#   geom_vline(xintercept = 0) +
-#   # Remove background color from plots
-#   theme_minimal() +
-#   # Turn off the legend
-#   guides(fill = "none")+
-#   # Add median values as text labels
-#   geom_text(data = f_stat, aes(x = 3.5, y = parameter, label = median_value), color = "black", hjust = 2) 

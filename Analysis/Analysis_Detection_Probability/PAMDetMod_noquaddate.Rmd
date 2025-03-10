@@ -40,14 +40,14 @@ library(ggplot2)
 library(corrgram)
 library(beepr)
 library(ggdist)
-source("C:/Users/annak/OneDrive/Documents/UM/Research/Coding_Workspace/Cuckoo-Research/R_Scripts/5_Visualization/Create_HexCodes_CuckooColorBlind.R")
+source("./Function_Scripts/Create_HexCodes_CuckooColorBlind.R")
 ```
 
 Load in formatted data
 
 ```{r Load in Data}
 # Read in newly formatted detection and detection covaraites data with ARU model type at site
-full_dat <- readRDS("C:/Users/annak/OneDrive/Documents/UM/Research/Coding_Workspace/Cuckoo-Research/Data/Habitat_Model_Covariates/Full_DetectionDataSCALED_JAGSModels_HabChap.Rdata")
+full_dat <- readRDS("./Analysis/Analysis_Detection_Probability/Data/2023_PAMData_FormatforOccModSCALED.Rdata")
 
 detections <- full_dat[,2:7]
 
@@ -114,10 +114,6 @@ effort_long <- effort_long %>% mutate(survey_period = case_when(survey_period ==
 effort_long <- unite(effort_long,site_survey,c(site_id, survey_period),sep="_",remove=TRUE)
 
 covs_long <- left_join(dates_long, db_long, by = "site_survey") %>% left_join(., effort_long, by = "site_survey")
-
-# corrgram(covs_long, order=TRUE, lower.panel=panel.cor,
-#          upper.panel=panel.pts, text.panel=panel.txt,
-#          main="Correlations in ARU Detection Metrics")
 
 # Include veg density in this comparison 
 # Reformat your long data
@@ -225,7 +221,7 @@ cat("
 
 ```{R Run Model, eval= TRUE, results = FALSE}
 fit_5 <- jags(data = jags_data, 
-                 model.file = "C:/Users/annak/OneDrive/Documents/UM/Research/Coding_Workspace/Cuckoo-Research/R_Scripts/2_Analyses/Methods_Chapter/ARU_Model/Model_Structure_Files/JAGS_ARUMod5.txt",
+                 model.file = "./Analysis/Analysis_Detection_Probability/Model_Structure_Files/JAGS_ARUMod5.txt",
                  parameters.to.save = c("a0", "b0", "b1", "b3", "b4", "b5","b6", "SSEsim","SSEobs","p_val"),
                  n.iter = 10000, 
                  n.burnin = 5000, 
@@ -236,12 +232,12 @@ beep(sound = 3)
 ```
 
 ```{R Save Model, eval = TRUE, echo = FALSE}
-saveRDS(fit_5, "C:/Users/annak/OneDrive/Documents/UM/Research/Coding_Workspace/Cuckoo-Research/R_Scripts/2_Analyses/Methods_Chapter/ARU_Model/Models_Ran_Outputs/MetChap_ARUMod5.Rdata")
+saveRDS(fit_5, "./Analysis/Analysis_Detection_Probability/Models_Ran_Outputs/MetChap_ARUMod5.Rdata")
 ```
 
 ### Model outputs: 
 ```{R, eval = FALSE, echo = FALSE}
-fit_5 <- readRDS("C:/Users/annak/OneDrive/Documents/UM/Research/Coding_Workspace/Cuckoo-Research/R_Scripts/2_Analyses/Methods_Chapter/ARU_Model/Models_Ran_Outputs/MetChap_ARUMod5.Rdata")
+fit_5 <- readRDS("./Analysis/Analysis_Detection_Probability/Models_Ran_Outputs/MetChap_ARUMod5.Rdata")
 ```
 ```{R}
 summary(fit_5)
@@ -372,7 +368,7 @@ f_waic_se
 How does this compare with the sites that also had playback surveys?
 ```{R Double Observer Method, eval = FALSE, echo = FALSE}
 # how does this line up with our naive estimates of how many sites had detections on ARU vs PB?
-pb_dat <- read.csv("C:/Users/annak/OneDrive/Documents/UM/Research/Coding_Workspace/Cuckoo-Research/Data/Playback_Results/2023/Outputs/2023_PBData_FormatforOccModSCALED_8-6-24.csv")
+pb_dat <- read.csv("./Analysis/Analysis_Detection_Probability/Data/2023_PBData_FormatforOccModSCALED_8-6-24.csv")
 # Pull out playback detections
 pb_dat$bbcu_pb <- apply(pb_dat[, 2:4], 1, max, na.rm = TRUE)
 pb <- pb_dat %>% select(site_id, bbcu_pb)

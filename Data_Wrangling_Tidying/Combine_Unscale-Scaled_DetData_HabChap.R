@@ -16,7 +16,7 @@ library(janitor)
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 # Site-level covariates
 # Read in vegetation density for each site
-vegdense <- read.csv("C:/Users/annak/OneDrive/Documents/UM/Research/Coding_Workspace/Cuckoo-Research/Data/Habitat_Model_Covariates/Detection_Covariates/ShrubTreeDensityComposite_2023_ARUPoints.csv")
+vegdense <- read.csv("./Data_Wrangling_Tidying/Vegetation_Data/Data/ShrubTreeDensityComposite_2023_ARUPoints.csv")
 vegdense <- vegdense %>%
   mutate(site_id = case_when(
     # If point_id has four letters then a dash then three numbers
@@ -30,23 +30,23 @@ vegdense_avg <- vegdense %>% group_by(site_id,sampling_design) %>% summarize(veg
 
 
 # background noise
-background_db <- read.csv("C:/Users/annak/OneDrive/Documents/UM/Research/Coding_Workspace/Cuckoo-Research/Data/Habitat_Model_Covariates/Detection_Covariates/BackgroundNoiseBandpass_2023_ARUPoints.csv")
+background_db <- read.csv("./Data_Wrangling_Tidying/Background_Noise/Data/BackgroundNoiseBandpass_2023_ARUPoints.csv")
 colnames(background_db) <- c("site_id","backdb_survey1","backdb_survey2","backdb_survey3","backdb_survey4","backdb_survey5","backdb_survey6")
 
 
 # Read in detection and effort data 
-effort <- read.csv("C:/Users/annak/OneDrive/Documents/UM/Research/Coding_Workspace/Cuckoo-Research/Data/Detection_History/2023_All_ARUs/Outputs/DetectionHist_CamTrapR/bbcu__effort__not_scaled_14_days_per_occasion__2024-04-29.csv") %>% clean_names
+effort <- read.csv("./Data_Wrangling_Tidying/PAM_Detection_History/Data/bbcu__effort__not_scaled_14_days_per_occasion__2024-04-29.csv") %>% clean_names
 survey_periods <- colnames(effort)
 colnames(effort) <- c("site_session","effort_survey1","effort_survey2","effort_survey3","effort_survey4","effort_survey5","effort_survey6")
 effort <- effort %>% separate(site_session, into = c("site_id","session_name"), sep = "__") %>% select(-session_name)
 
 
-arutype <- read.csv("./Data/Habitat_Model_Covariates/Detection_Covariates/ARUtype_22-23.csv")
+arutype <- read.csv("./Data_Wrangling_Tidying/ARUtype_22-23.csv")
 # separate out 2023 data
 arutype <- arutype %>% filter(year == "2023") %>% select(-year)
 
 
-detections_orig <- read.csv("C:/Users/annak/OneDrive/Documents/UM/Research/Coding_Workspace/Cuckoo-Research/Data/Detection_History/2023_All_ARUs/Outputs/DetectionHist_CamTrapR/bbcu__detection_history__with_effort__14_days_per_occasion__2024-04-29.csv") %>% clean_names
+detections_orig <- read.csv("./Data_Wrangling_Tidying/PAM_Detection_History/Data/bbcu__detection_history__with_effort__14_days_per_occasion__2024-04-29.csv") %>% clean_names
 detections <- detections_orig
 colnames(detections) <- c("site_session","det_survey1","det_survey2","det_survey3","det_survey4","det_survey5","det_survey6")
 # Split apart the detections into site and point
@@ -93,10 +93,7 @@ full_dat <- full_dat %>% select(-c(session_name, sampling_design))
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 #### Save Unscaled Data ####
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-#saveRDS(full_dat, file ="./Data/Habitat_Model_Covariates/Full_DetectionData_JAGSModels_HabChap.Rdata")
-#test <- readRDS("./Data/Habitat_Model_Covariates/Full_DetectionData_JAGSModels_HabChap.Rdata")
-
-
+#saveRDS(full_dat, file ="./Data/Habitat_Model_Covariates/2023_PAMData_FormatforOccMod.Rdata")
 
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -162,10 +159,4 @@ full_dat_s <- full_dat_s %>% select(-session_name)
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 #### Save Scaled Data ####
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-#saveRDS(full_dat_s, file = "./Data/Habitat_Model_Covariates/Full_DetectionDataSCALED_JAGSModels_HabChap.Rdata") 
-
-
-
-# scaled_orig <- readRDS("./Data/Habitat_Model_Covariates/Archive/Full_DetectionDataSCALED_JAGSModels_HabChap_noARUtype.Rdata")
-#test_s <- readRDS("./Data/Habitat_Model_Covariates/Full_DetectionDataSCALED_JAGSModels_HabChap.Rdata")
-
+#saveRDS(full_dat_s, file = "./Analysis/Analysis_Detection_Probability/Data/2023_PAMData_FormatforOccModSCALED.Rdata") 

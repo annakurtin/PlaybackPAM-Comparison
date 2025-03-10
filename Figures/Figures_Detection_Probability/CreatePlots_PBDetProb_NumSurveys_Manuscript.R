@@ -6,15 +6,15 @@ library(ggplot2)
 library(ggdist)
 library(corrgram)
 library(reshape2)
-source("C:/Users/annak/OneDrive/Documents/UM/Research/Coding_Workspace/Cuckoo-Research/R_Scripts/5_Visualization/Create_HexCodes_CuckooColorBlind.R")
+source("./Function_Scripts/Create_HexCodes_CuckooColorBlind.R")
 
 
 # Read in models and data
-fit_pb <- readRDS("C:/Users/annak/OneDrive/Documents/UM/Research/Coding_Workspace/Cuckoo-Research/R_Scripts/2_Analyses/Methods_Chapter/Playback_Model/Models_Ran_Outputs/JAGS_PBMod2.txt")
-pb_dat <- read.csv("C:/Users/annak/OneDrive/Documents/UM/Research/Coding_Workspace/Cuckoo-Research/Data/Playback_Results/2023/Outputs/2023_PBData_FormatforOccModSCALED_8-6-24.csv")
+fit_pb <- readRDS("./Analysis/Analysis_Detection_Probability/Models_Ran_Outputs/JAGS_PBMod2.txt")
+pb_dat <- read.csv("./Analysis/Analysis_Detection_Probability/Data/2023_PBData_FormatforOccModSCALED_8-6-24.csv")
 
-fit_pam <- readRDS("C:/Users/annak/OneDrive/Documents/UM/Research/Coding_Workspace/Cuckoo-Research/R_Scripts/2_Analyses/Methods_Chapter/ARU_Model/Models_Ran_Outputs/MetChap_ARUMod4.Rdata")
-pam_dat <- read.csv("C:/Users/annak/OneDrive/Documents/UM/Research/Coding_Workspace/Cuckoo-Research/Data/Habitat_Model_Covariates/HabChap_DetOccCovsFull_SCALED_8-12.csv")
+fit_pam <- readRDS("./Analysis/Analysis_Detection_Probability/Models_Ran_Outputs/MetChap_ARUMod4.Rdata")
+pam_dat <- read.csv("./Analysis/Analysis_Detection_Probability/Data/2023_PAMData_FormatforOccMod.Rdata")
 
 
 # Get the value for the cumulative detection probability across the season for PAM
@@ -76,20 +76,3 @@ pb_pnumsurveys <- ggplot(data = pb_pstars_long, aes(x = num_surveys, y = cumulat
         axis.title.x = element_text(size = 13),
         axis.title.y = element_text(size = 13)) 
 
-
-#pb_pnumsurveys
-# # Old color: 
-# "#B75F4A"
-# "#B24300"
-# "#23175D"
-# "#B3A9EA"
-# "#23175D" "#2A1B70" "#312083" "#422FA0" "#5641C1" "#725ED7" "#9586E1" "#B3A9EA" "#C2B9EE"
-# [10] "#D1CAF2"
-
-
-# Gravy yard (spooky) ######
-
-# Create a custom function to add 95% confidence intervals
-# create_ci <- function(x){
-#   median <- median(x)
-# }

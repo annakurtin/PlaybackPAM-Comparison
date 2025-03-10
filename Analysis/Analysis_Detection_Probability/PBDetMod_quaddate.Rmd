@@ -11,10 +11,6 @@ Covariates to include:
 * date (as a proxy for round of survey/time during the season like they included), temperature (Based on Johnson and Benson 2022)
 * noise (Johnson and Benson 2023)
 
- I tried to find more informative priors for temperature and noise based off of the Johnson and Benson paper, but was struggling with how to change the beta coefficients from these papers into something we could use. Do we need more informed priors since the data is small?
-
-*Effective sample size for this data* 33 * 3 = 66. What is the number of parameters we can effectively fit with this data? 
-
 #### Model Structure: 
 
 Naive state model:
@@ -61,11 +57,11 @@ library(jagshelper)
 library(ggplot2)
 library(ggdist)
 library(corrgram)
-source("C:/Users/annak/OneDrive/Documents/UM/Research/Coding_Workspace/Cuckoo-Research/R_Scripts/5_Visualization/Create_HexCodes_CuckooColorBlind.R")
+source("./Function_Scripts/Create_HexCodes_CuckooColorBlind.R")
 ```
 
 ```{r Read in Data, warnings = FALSE, message = FALSE}
-pb_dat <- read.csv("C:/Users/annak/OneDrive/Documents/UM/Research/Coding_Workspace/Cuckoo-Research/Data/Playback_Results/2023/Outputs/2023_PBData_FormatforOccModSCALED_8-6-24.csv")
+pb_dat <- read.csv("./Analysis/Analysis_Detection_Probability/Data/2023_PBData_FormatforOccModSCALED_8-6-24.csv")
 
 detections <- pb_dat[,2:4]
 
@@ -120,38 +116,6 @@ time <- pb_dat %>% select(site_id, time_s1, time_s2, time_s3)
 
 No correlations here to worry about (all r < 0.6)
 
-```{R, echo = FALSE, eval = FALSE}
-# Converting estimates of detection from previous studies to log odds for use in this model
-# Johnson and Benson 2022: effect of temperature at a site level: 0.26
-# Choosing site level instead of point level because it corresponds most strongly to what we're looking at (grouping by site)
-# This is reported on unscaled data on probability scale
-# Pulled from supplements the SE of temperature on a landscape/site scale
-se_temp <- 0.33
-# from methods: selected 41 sites
-nsite_JB22 <- 41
-# to convert to standard deviation, multiply by the square root of the sample size
-sd_temp <- se_temp*sqrt(nsite_JB22)
-# From supplement - mean temp on landscape/site scale
-mean_temp <- 19.2
-# calculate scaled beta based on formula for regression: https://stats.stackexchange.com/questions/74622/converting-standardized-betas-back-to-original-variables
-# formula B*(sdx/sdy)
-## what is the standard deviation of the y covariate? this is binary 1/0, BBCU recorded at 107 of 345 sites
-p <- 107/345 # probability of success
-sd_yJB22 <-  sqrt(p * (1 - p))
-scaled_btemp <- 0.26 *(sd_temp/sd_yJB22)
-# Now convert this to log odds for your prior
-ptemp_JB22 <- qlogis(scaled_btemp)
-
-
-# effect of noise on detection probability of BBCU (Johnson and Benson 2023)
-# Reported on unscaled data on log odds scale
-pnoise <- -0.45
-
-#Based on conversation with Kaitlyn and Colton 9/23 - the authors are reporting the covariate estimates on the scaled data, not the unscaled data. J&B '23 reports the estimates in the logit (log odds) scale and the values on unscaled data, J&B '22 reports the estimates in the probability scale and the value on the unscaled data. 
-
-# To transform the estimate: 
-#(b *sd_x/sd_response)
-```
 
 ### Set Up and Run Model
 
@@ -235,13 +199,13 @@ cat("
     p_val <- step(SSEsim - SSEobs)  
     
   }
-  ", file = "C:/Users/annak/OneDrive/Documents/UM/Research/Coding_Workspace/Cuckoo-Research/R_Scripts/2_Analyses/Methods_Chapter/Playback_Model/Model_Structure_Files/JAGS_PBMod2.txt")
+  ", file = "./Analysis/Analysis_Detection_Probability/Model_Structure_Files/JAGS_PBMod2.txt")
 
 ```
 
 ```{R Run Model, eval = FALSE, results = FALSE}
 fit_2 <- jags(data = jags_data, 
-                 model.file = "C:/Users/annak/OneDrive/Documents/UM/Research/Coding_Workspace/Cuckoo-Research/R_Scripts/2_Analyses/Methods_Chapter/Playback_Model/Model_Structure_Files/JAGS_PBMod2.txt",
+                 model.file = "./Analysis/Analysis_Detection_Probability/Model_Structure_Files/JAGS_PBMod2.txt",
                  parameters.to.save = c("a0", "b0", "b1", "b1Q", "b3", "b4","SSEsim","SSEobs", "p_val"),
                  n.iter = 10000, 
                  n.burnin = 5000, 
@@ -249,11 +213,11 @@ fit_2 <- jags(data = jags_data,
                  n.thin = 2,
                  inits = init_func)
 beep(sound = 3)
-saveRDS(fit_2,"C:/Users/annak/OneDrive/Documents/UM/Research/Coding_Workspace/Cuckoo-Research/R_Scripts/2_Analyses/Methods_Chapter/Playback_Model/Models_Ran_Outputs/JAGS_PBMod2.txt")
+saveRDS(fit_2,"./Analysis/Analysis_Detection_Probability/Models_Ran_Outputs/JAGS_PBMod2.txt")
 ```
 
 ```{R, echo = FALSE}
-fit_2 <- readRDS("C:/Users/annak/OneDrive/Documents/UM/Research/Coding_Workspace/Cuckoo-Research/R_Scripts/2_Analyses/Methods_Chapter/Playback_Model/Models_Ran_Outputs/JAGS_PBMod2.txt")
+fit_2 <- readRDS("./Analysis/Analysis_Detection_Probability/Models_Ran_Outputs/JAGS_PBMod2.txt")
 ```
 
 ```{R, echo = FALSE}
@@ -354,66 +318,4 @@ n <- 3
 p_star <- round(1 - (1 - p)^n,4)
 print(paste0("Cumulative estimated detection probability: ",p_star*100))
 # how does this line up with our naive estimates of how many sites had detections on ARU vs PB
-```
-
-### How Many Surveys Do we Need?
-
-```{R}
-# empty array for storing detection probability
-#array: same number of rows as MCMC samples, same columns as number of surveys you want to investigate
-nrow <- fit_2$mcmc.info$n.samples
-max_surveys <- 10
-pstar <- array(NA, dim = c(nrow, max_surveys))
-
-# Set up x values with the same number of rows as your array
-# x values will allow plotting of box values
-x <-  cbind(rep(1, nrow), rep(2, nrow), rep(3, nrow), 
-          rep(4, nrow), rep(5, nrow), rep(6, nrow), 
-          rep(7, nrow), rep(8, nrow), rep(9, nrow), 
-          rep(10, nrow))
-
-#Set up a for-loop that will run the same amount of iterations as the samples produced in the MCMC
-for (i in 1:nrow) { 
-  # fills in data for each row 
-  for (j in 1:max_surveys){ 
-    # Fills in data for each column (i.e. number of columns)
-    pstar[i,j] <- 1 - (1 - plogis(fit_2$sims.list$b0[i] + fit_2$sims.list$b1[i]*0 + fit_2$sims.list$b1Q[i]*0)+ fit_2$sims.list$b3[i]*0+ fit_2$sims.list$b4[i]*0)^j #Calculate estimated maximum detection probability for each survey using mean probability calculated in the MCMC 
-  } 
-}
-
-#Plot the probability of detection for each survey, along with associated confidence intervals 
-boxplot(pstar ~ x, col = cuckoo_palette[1], las = 1, ylab = "Cumulative Detection Probability", 
-        xlab = "Number of surveys", outline = FALSE)
-#Add an abline that represents the 95% CI cutoff 
-abline(h = 0.95, lty = 2, lwd = 2)
-```
-
-
-
-```{R Graveyard, echo = FALSE, eval = FALSE}
-# # OLD: se on a point scale
-# se_temp <- 1.74
-# # sample size calculating by summing up all the surveys they said they did
-# samp1_JB22 <- 473+993+492+1029
-# # Sample size calcuated by summing up the number of points by how many times they were surveyed each seas
-# # 345 points, each sampled 3 times in 2019 (345x3) and each 3 x in 2020 (331.4 x 3)except 4 surveyed 2x (4 x 8.4 avg points per site - 33.6 points)
-# samp2_JB22 <- (345*3)+(331.4*3)+(33.6*2)
-# sd_temp <- 1.74*sqrt(samp2_JB22)
-# # was very large (95) using estimates from samp1, samp2 seems more reasonable. Not sure which one is the actual number of surveys.
-
-# Johnson and Benson 2022: effect of temperature at point scale: 0.12
-qlogis(0.12)
-# Use these for our prior values
-# Am I converting these from the paper correctly? Seems like a strong effect
-
-
-
-#OLD # Create the violin plot
-# ggplot() +
-#   geom_violin(data=chains_beta_l, aes(x = Parameter, y = Values,fill = Parameter),trim = FALSE) +
-#   labs(title = "Posterior Distribution of Detection Covariates") +
-#   scale_fill_manual(values = c("date" = palette_8[1], "quadratic date" = palette_8[2],  "wind_strength" = palette_8[5], "temp" = palette_8[6])) + 
-#   geom_hline(yintercept = 0, linetype = "solid", color = "black") +
-#   theme_minimal()
-
 ```
