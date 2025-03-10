@@ -12,7 +12,7 @@ library(dplyr)
 library(ubms)
 library(MCMCvis)
 library(ggplot2)
-source("./R_Scripts/6_Function_Scripts/make_int_fun.R")
+source("./Data_Wrangling_Tidying/PAM_Survey_Period_Sensitivity_Analysis/make_int_fun.R")
 # Set options to only evaluate three significant digits
 options(digits = 3)
 
@@ -21,7 +21,7 @@ options(digits = 3)
 #load("./Data/Example_Data/FromSara_MakeDetectionHistory/raw_lion_dat.Rdata") 
 # manipulate your data to match this format 
 # Read in camtrapR data
-detection <- read.csv("./Data/Detection_History/2023_All_ARUs/Outputs/1Day_SurveyPeriod/bbcu__detection_history__with_effort__1_days_per_occasion__occasionStart0h__first_day_2023-06-01__2024-04-29.csv") 
+detection <- read.csv("./Data_Wrangling_Tidying/PAM_Survey_Period_Sensitivity_Analysis/Data/bbcu__detection_history__with_effort__1_days_per_occasion__occasionStart0h__first_day_2023-06-01__2024-04-29.csv") 
 # Rename columns
 new_col_names <- names(detection) %>%
   # Extract the YYYY.MM.DD part after "X" using string manipulation
@@ -35,7 +35,7 @@ detection <- detection %>% separate(X, into = c("Station","session_id"), sep = "
 # Pivot this longer
 detection <- detection %>% pivot_longer(cols=-Station, names_to = "Date", values_to = "Obs")
 
-effort <- read.csv("./Data/Detection_History/2023_All_ARUs/Outputs/1Day_SurveyPeriod/bbcu__effort__not_scaled_1_days_per_occasion__occasionStart0h__first_day_2023-06-01__2024-04-29.csv")
+effort <- read.csv(".//Data_Wrangling_Tidying/PAM_Survey_Period_Sensitivity_Analysis/Data/bbcu__effort__not_scaled_1_days_per_occasion__occasionStart0h__first_day_2023-06-01__2024-04-29.csv")
 # Rename columns
 new_col_names <- names(effort) %>%
   # Extract the YYYY.MM.DD part after "X" using string manipulation
@@ -53,15 +53,6 @@ effort <- effort %>% pivot_longer(cols=-Station, names_to = "Date", values_to = 
 lion_occ <- left_join(detection, effort, by = c("Station","Date"))
 # Format the date column as a date
 lion_occ$Date <- as.Date(lion_occ$Date)
-
-# # Convert to one detection/non-detection value per station per day - already done
-# lion_occ <- raw_lion_dat %>%
-#     group_by(Station, Date) %>%
-# 	mutate(Obs = max(Obs, na.rm = TRUE)) %>%
-#     mutate(Eff = sum(Eff, na.rm = TRUE)) %>%
-#     slice(1) %>%
-# 	as.data.frame() 
-
 
 # Different sampling occasion lengths to try out (in days)
 samp_occ_l <- c(1, 3, 5, 7, 10, 14, 30)
@@ -172,11 +163,11 @@ for(j in 1:length(samp_occ_l)){
 samp_occ_l_summ
 
 # Save summarized output of all sample occasion lengths
-save(samp_occ_l_summ, file = "./Data/Detection_History/2023_All_ARUs/Outputs/fit_varying_samplength_occ.Rdata")
+save(samp_occ_l_summ, file = "./Data_Wrangling_Tidying/PAM_Survey_Period_Sensitivity_Analysis/Data/fit_varying_samplength_occ.Rdata")
 
 
 # Visualize
-jpeg(paste("./Data/Detection_History/2023_All_ARUs/Outputs/SamplingLength_EffectDetectionProb.jpg"), width = 450, height = 580)
+jpeg(paste("./Data_Wrangling_Tidying/PAM_Survey_Period_Sensitivity_Analysis/SamplingLength_EffectDetectionProb.jpg"), width = 450, height = 580)
 ggplot(data = samp_occ_l_summ, 
         aes(y = mean_det, x = as.factor(samp_occ_days))) +
     geom_point(size = 2.5, shape = 19) +
@@ -188,10 +179,8 @@ ggplot(data = samp_occ_l_summ,
     ylab("Detection probability (logit scale)") +
     theme(text = element_text(size = 14))
 dev.off()
-# Thoughts:
-# It looks like detection probability starts to plateau around 7 days - does jump up again around 14 days though?
 
-jpeg(paste("./Data/Detection_History/2023_All_ARUs/Outputs/SamplingLength_InfluenceOnDetectionProb.jpg"), width = 450, height = 580)
+jpeg(paste("./Data_Wrangling_Tidying/PAM_Survey_Period_Sensitivity_Analysis/SamplingLength_InfluenceOnDetectionProb.jpg"), width = 450, height = 580)
 ggplot(data = samp_occ_l_summ, 
         aes(y = mean_eff, x = as.factor(samp_occ_days))) +
     geom_point(size = 2.5, shape = 19) +
@@ -203,9 +192,8 @@ ggplot(data = samp_occ_l_summ,
     ylab("Influence of effort on detection probability") +
     theme(text = element_text(size = 14))
 dev.off()
-# Looks like lowest influence on detection probability is 7 days
 
-jpeg(paste("./Data/Detection_History/2023_All_ARUs/Outputs/SamplingLength_EffectOccurenceProb.jpg"), width = 450, height = 580)
+jpeg(paste("./Data_Wrangling_Tidying/PAM_Survey_Period_Sensitivity_Analysis/SamplingLength_EffectOccurenceProb.jpg"), width = 450, height = 580)
 ggplot(data = samp_occ_l_summ, 
         aes(y = mean_occ, x = as.factor(samp_occ_days))) +
     geom_point(size = 2.5, shape = 19) +
@@ -217,4 +205,3 @@ ggplot(data = samp_occ_l_summ,
     ylab("Occurrence probability (logit scale)") +
     theme(text = element_text(size = 14))
 dev.off()
-# These all overlap quite heavily
